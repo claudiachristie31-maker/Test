@@ -6,6 +6,13 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Prevent duplicate panels if the script runs again
+local existing = playerGui:FindFirstChild("NickoyPanel")
+if existing then
+    existing:Destroy()
+end
 
 local espEnabled = false
 local flyEnabled = false
@@ -20,7 +27,12 @@ local flyAttachment
 local MAX_AIM_DISTANCE = 150
 local AIM_SMOOTHNESS = 0.15
 
-local npcFolder = workspace:WaitForChild("PracticeNPCs")
+-- This folder is optional; the script will not hang if missing.
+local npcFolder = workspace:FindFirstChild("PracticeNPCs")
+
+if not npcFolder then
+    warn("NickoyPanel: Create Workspace > PracticeNPCs for aim training.")
+end
 
 local highlights = {}
 local tracked = {}
@@ -31,7 +43,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "NickoyPanel"
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 100
-screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.Parent = playerGui
 
 local panel = Instance.new("Frame")
 panel.Name = "MainPanel"
@@ -91,7 +103,7 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 7)
 toggleCorner.Parent = guiToggle
 
--- Button layout
+-- Buttons
 local buttonContainer = Instance.new("Frame")
 buttonContainer.Position = UDim2.fromOffset(12, 50)
 buttonContainer.Size = UDim2.new(1, -24, 1, -62)
@@ -136,7 +148,9 @@ end
 -- ESP
 local function clearHighlights()
     for character, highlight in pairs(highlights) do
-        highlight:Destroy()
+        if highlight then
+            highlight:Destroy()
+        end
         highlights[character] = nil
     end
 end
@@ -196,9 +210,12 @@ Players.PlayerRemoving:Connect(function(otherPlayer)
         characterConnections[otherPlayer] = nil
     end
 
-    if otherPlayer.Character and highlights[otherPlayer.Character] then
-        highlights[otherPlayer.Character]:Destroy()
-        highlights[otherPlayer.Character] = nil
+    if otherPlayer.Character then
+        local highlight = highlights[otherPlayer.Character]
+        if highlight then
+            highlight:Destroy()
+            highlights[otherPlayer.Character] = nil
+        end
     end
 end)
 
@@ -243,14 +260,14 @@ end
 local function startFly()
     local character = player.Character
     if not character then
-        return
+        return false
     end
 
     local root = character:FindFirstChild("HumanoidRootPart")
     local humanoid = character:FindFirstChildOfClass("Humanoid")
 
     if not root or not humanoid then
-        return
+        return false
     end
 
     stopFly()
@@ -303,41 +320,37 @@ local function startFly()
             humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
         end
     end)
+
+    return true
 end
 
 flyButton.Activated:Connect(function()
-    flyEnabled = not flyEnabled
-
     if flyEnabled then
-        startFly()
-        if not flyConnection then
-            flyEnabled = false
-        end
-    else
+        flyEnabled = false
         stopFly()
+    else
+        flyEnabled = startFly()
     end
 
     setButton(flyButton, flyEnabled, "FLY")
 end)
 
--- AIM ASSIST: NPC PRACTICE TARGET HEADS
+-- NPC PRACTICE HEAD TRACKING
 local function getNearestNPCHead()
     local camera = workspace.CurrentCamera
-    if not camera then
+    if not camera or not npcFolder or not npcFolder.Parent then
         return nil
     end
 
-    local nearestHead = nil
+    local nearestHead
     local nearestDistance = MAX_AIM_DISTANCE
 
     for _, npc in ipairs(npcFolder:GetChildren()) do
         local humanoid = npc:FindFirstChildOfClass("Humanoid")
         local head = npc:FindFirstChild("Head")
 
-        if humanoid
-            and humanoid.Health > 0
-            and head
-            and head:IsA("BasePart") then
+        if humanoid and humanoid.Health > 0
+            and head and head:IsA("BasePart") then
 
             local distance =
                 (head.Position - camera.CFrame.Position).Magnitude
@@ -371,7 +384,7 @@ aimButton.Activated:Connect(function()
             local camera = workspace.CurrentCamera
             local head = getNearestNPCHead()
 
-            if camera and head then
+            if camera and head and head.Parent then
                 local targetCFrame = CFrame.lookAt(
                     camera.CFrame.Position,
                     head.Position
@@ -388,14 +401,14 @@ aimButton.Activated:Connect(function()
     setButton(aimButton, aimAssistEnabled, "AIM ASSIST")
 end)
 
--- RESPAWN HANDLING
+-- RESPAWN
 player.CharacterAdded:Connect(function()
     stopFly()
     flyEnabled = false
     setButton(flyButton, false, "FLY")
 end)
 
--- SHOW/HIDE PANEL
+-- SHOW / HIDE
 guiToggle.Activated:Connect(function()
     panel.Visible = true
     guiToggle.Visible = false
