@@ -1,8 +1,7 @@
 
 -- Made by Nickoy
 -- Roblox Studio GUI Panel
--- Place in StarterPlayer > StarterPlayerScripts
--- Use as a LocalScript in your own Roblox experience
+-- Place a LocalScript in StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,9 +10,11 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local espEnabled = false
 local flyEnabled = false
+
 local flyConnection
 local bodyVelocity
 local bodyGyro
+local flyAttachment
 
 local tracked = {}
 local highlights = {}
@@ -28,6 +29,7 @@ gui.IgnoreGuiInset = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
+panel.Name = "MainPanel"
 panel.Size = UDim2.fromOffset(260, 205)
 panel.Position = UDim2.new(0.5, -130, 0.35, 0)
 panel.AnchorPoint = Vector2.zero
@@ -45,6 +47,23 @@ local stroke = Instance.new("UIStroke")
 stroke.Color = Color3.fromRGB(220, 45, 55)
 stroke.Thickness = 2
 stroke.Parent = panel
+
+-- Show panel button
+local guiToggle = Instance.new("TextButton")
+guiToggle.Name = "EnableGUI"
+guiToggle.Size = UDim2.fromOffset(120, 38)
+guiToggle.Position = UDim2.new(0, 15, 0, 15)
+guiToggle.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
+guiToggle.TextColor3 = Color3.new(1, 1, 1)
+guiToggle.Text = "SHOW PANEL"
+guiToggle.TextSize = 14
+guiToggle.Font = Enum.Font.GothamBold
+guiToggle.Visible = false
+guiToggle.ZIndex = 10
+guiToggle.Parent = gui
+
+Instance.new("UICorner", guiToggle).CornerRadius =
+    UDim.new(0, 8)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -45, 0, 45)
@@ -68,7 +87,9 @@ close.Font = Enum.Font.GothamBold
 close.TextSize = 15
 close.ZIndex = 3
 close.Parent = panel
-Instance.new("UICorner", close).CornerRadius = UDim.new(0, 7)
+
+Instance.new("UICorner", close).CornerRadius =
+    UDim.new(0, 7)
 
 local function makeButton(text, y)
     local b = Instance.new("TextButton")
@@ -83,17 +104,19 @@ local function makeButton(text, y)
     b.ZIndex = 3
     b.Parent = panel
 
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", b).CornerRadius =
+        UDim.new(0, 8)
+
     return b
 end
 
 local espButton = makeButton("ESP: OFF", 55)
 local flyButton = makeButton("FLY: OFF", 111)
 
--- ESP for your own Roblox experience
+-- ESP for your own experience
 local function clearHighlights()
     for character, highlight in pairs(highlights) do
-        if highlight and highlight.Parent then
+        if highlight then
             highlight:Destroy()
         end
         highlights[character] = nil
@@ -144,6 +167,15 @@ end
 
 Players.PlayerAdded:Connect(track)
 
+Players.PlayerRemoving:Connect(function(otherPlayer)
+    local character = otherPlayer.Character
+    if character and highlights[character] then
+        highlights[character]:Destroy()
+        highlights[character] = nil
+    end
+    tracked[otherPlayer] = nil
+end)
+
 espButton.Activated:Connect(function()
     espEnabled = not espEnabled
     espButton.Text = "ESP: " .. (espEnabled and "ON" or "OFF")
@@ -163,7 +195,7 @@ espButton.Activated:Connect(function()
     end
 end)
 
--- Fly for Studio testing
+-- Fly movement for Studio testing
 local function stopFly()
     if flyConnection then
         flyConnection:Disconnect()
@@ -179,12 +211,19 @@ local function stopFly()
         bodyGyro:Destroy()
         bodyGyro = nil
     end
+
+    if flyAttachment then
+        flyAttachment:Destroy()
+        flyAttachment = nil
+    end
 end
 
 local function startFly()
     local character = player.Character
-    local root = character and character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = character and
+        character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and
+        character:FindFirstChildOfClass("Humanoid")
 
     if not root or not humanoid then
         return false
@@ -192,29 +231,54 @@ local function startFly()
 
     stopFly()
 
-    bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    bodyVelocity.Velocity = Vector3.zero
-    bodyVelocity.Parent = root
+    local attachment = Instance.new("Attachment")
+    attachment.Name = "NickoyFlyAttachment"
+    attachment.Parent = root
+    flyAttachment = attachment
 
-    bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-    bodyGyro.P = 1e4
-    bodyGyro.Parent = root
+    local velocity = Instance.new("LinearVelocity")
+    velocity.Name = "NickoyFlyVelocity"
+    velocity.Attachment0 = attachment
+    velocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    velocity.MaxForce = 100000
+    velocity.VectorVelocity = Vector3.zero
+    velocity.Parent = root
+    bodyVelocity = velocity
 
-    flyConnection = RunService.RenderStepped:Connect(function()
+    local orientation = Instance.new("AlignOrientation")
+    orientation.Name = "NickoyFlyOrientation"
+    orientation.Attachment0 = attachment
+    orientation.Mode =
+        Enum.OrientationAlignmentMode.OneAttachment
+    orientation.MaxTorque = 100000
+    orientation.Responsiveness = 15
+    orientation.Parent = root
+    bodyGyro = orientation
+
+    flyConnection = RunService.Heartbeat:Connect(function()
         if not root.Parent or not humanoid.Parent then
             stopFly()
             flyEnabled = false
             flyButton.Text = "FLY: OFF"
-            flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+            flyButton.BackgroundColor3 =
+                Color3.fromRGB(48, 48, 56)
             return
         end
 
         local camera = workspace.CurrentCamera
-        if camera and bodyGyro and bodyVelocity then
-            bodyGyro.CFrame = camera.CFrame
-            bodyVelocity.Velocity = humanoid.MoveDirection * 45
+        if camera and bodyVelocity and bodyGyro then
+            bodyVelocity.VectorVelocity =
+                humanoid.MoveDirection * 45
+
+            local look = camera.CFrame.LookVector
+            local flatLook = Vector3.new(look.X, 0, look.Z)
+
+            if flatLook.Magnitude > 0.001 then
+                bodyGyro.CFrame = CFrame.lookAt(
+                    Vector3.zero,
+                    flatLook.Unit
+                )
+            end
         end
     end)
 
@@ -226,12 +290,14 @@ flyButton.Activated:Connect(function()
         flyEnabled = false
         stopFly()
         flyButton.Text = "FLY: OFF"
-        flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+        flyButton.BackgroundColor3 =
+            Color3.fromRGB(48, 48, 56)
     else
         if startFly() then
             flyEnabled = true
             flyButton.Text = "FLY: ON"
-            flyButton.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
+            flyButton.BackgroundColor3 =
+                Color3.fromRGB(150, 35, 42)
         end
     end
 end)
@@ -243,9 +309,20 @@ player.CharacterAdded:Connect(function()
     flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
 end)
 
+-- Hide panel; SHOW PANEL brings it back
+guiToggle.Activated:Connect(function()
+    panel.Visible = true
+    guiToggle.Visible = false
+end)
+
 close.Activated:Connect(function()
+    flyEnabled = false
     stopFly()
-    gui:Destroy()
+    flyButton.Text = "FLY: OFF"
+    flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+
+    panel.Visible = false
+    guiToggle.Visible = true
 end)
 
 -- Drag panel with mouse or touch
