@@ -27,4 +27,3 @@ for _, player in Players:GetPlayers() do
 end
 
 Players.PlayerAdded:Connect(trackPlayer)
-]])()
