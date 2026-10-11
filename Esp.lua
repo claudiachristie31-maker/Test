@@ -1,4 +1,4 @@
-loadstring([[
+
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
@@ -11,7 +11,10 @@ local function addHighlight(character)
     highlight.FillColor = Color3.fromRGB(255, 60, 60)
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.FillTransparency = 0.65
-    highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+
+    -- Visible through walls
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
     highlight.Parent = character
 end
 
@@ -19,6 +22,7 @@ local function trackPlayer(player)
     if player.Character then
         addHighlight(player.Character)
     end
+
     player.CharacterAdded:Connect(addHighlight)
 end
 
