@@ -62,8 +62,7 @@ guiToggle.Visible = false
 guiToggle.ZIndex = 10
 guiToggle.Parent = gui
 
-Instance.new("UICorner", guiToggle).CornerRadius =
-    UDim.new(0, 8)
+Instance.new("UICorner", guiToggle).CornerRadius = UDim.new(0, 8)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -45, 0, 45)
@@ -88,8 +87,7 @@ close.TextSize = 15
 close.ZIndex = 3
 close.Parent = panel
 
-Instance.new("UICorner", close).CornerRadius =
-    UDim.new(0, 7)
+Instance.new("UICorner", close).CornerRadius = UDim.new(0, 7)
 
 local function makeButton(text, y)
     local b = Instance.new("TextButton")
@@ -104,8 +102,7 @@ local function makeButton(text, y)
     b.ZIndex = 3
     b.Parent = panel
 
-    Instance.new("UICorner", b).CornerRadius =
-        UDim.new(0, 8)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
 
     return b
 end
@@ -195,7 +192,7 @@ espButton.Activated:Connect(function()
     end
 end)
 
--- Fly movement for Studio testing
+-- Fly movement
 local function stopFly()
     if flyConnection then
         flyConnection:Disconnect()
@@ -218,12 +215,11 @@ local function stopFly()
     end
 end
 
+-- Updated camera-directed flight
 local function startFly()
     local character = player.Character
-    local root = character and
-        character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character and
-        character:FindFirstChildOfClass("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
     if not root or not humanoid then
         return false
@@ -231,54 +227,57 @@ local function startFly()
 
     stopFly()
 
-    local attachment = Instance.new("Attachment")
-    attachment.Name = "NickoyFlyAttachment"
-    attachment.Parent = root
-    flyAttachment = attachment
+    flyAttachment = Instance.new("Attachment")
+    flyAttachment.Name = "NickoyFlyAttachment"
+    flyAttachment.Parent = root
 
-    local velocity = Instance.new("LinearVelocity")
-    velocity.Name = "NickoyFlyVelocity"
-    velocity.Attachment0 = attachment
-    velocity.RelativeTo = Enum.ActuatorRelativeTo.World
-    velocity.MaxForce = 100000
-    velocity.VectorVelocity = Vector3.zero
-    velocity.Parent = root
-    bodyVelocity = velocity
+    bodyVelocity = Instance.new("LinearVelocity")
+    bodyVelocity.Name = "NickoyFlyVelocity"
+    bodyVelocity.Attachment0 = flyAttachment
+    bodyVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    bodyVelocity.VelocityConstraintMode =
+        Enum.VelocityConstraintMode.Vector
+    bodyVelocity.ForceLimitsEnabled = false
+    bodyVelocity.VectorVelocity = Vector3.new(0, 35, 0)
+    bodyVelocity.Parent = root
 
-    local orientation = Instance.new("AlignOrientation")
-    orientation.Name = "NickoyFlyOrientation"
-    orientation.Attachment0 = attachment
-    orientation.Mode =
+    bodyGyro = Instance.new("AlignOrientation")
+    bodyGyro.Name = "NickoyFlyOrientation"
+    bodyGyro.Attachment0 = flyAttachment
+    bodyGyro.Mode =
         Enum.OrientationAlignmentMode.OneAttachment
-    orientation.MaxTorque = 100000
-    orientation.Responsiveness = 15
-    orientation.Parent = root
-    bodyGyro = orientation
+    bodyGyro.MaxTorque = 100000
+    bodyGyro.Responsiveness = 15
+    bodyGyro.Parent = root
+
+    humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 
     flyConnection = RunService.Heartbeat:Connect(function()
         if not root.Parent or not humanoid.Parent then
             stopFly()
             flyEnabled = false
             flyButton.Text = "FLY: OFF"
-            flyButton.BackgroundColor3 =
-                Color3.fromRGB(48, 48, 56)
+            flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
             return
         end
 
         local camera = workspace.CurrentCamera
-        if camera and bodyVelocity and bodyGyro then
-            bodyVelocity.VectorVelocity =
-                humanoid.MoveDirection * 45
+        if not camera then
+            return
+        end
 
-            local look = camera.CFrame.LookVector
-            local flatLook = Vector3.new(look.X, 0, look.Z)
+        -- Move in the direction the camera looks, including up/down
+        bodyVelocity.VectorVelocity = camera.CFrame.LookVector * 45
 
-            if flatLook.Magnitude > 0.001 then
-                bodyGyro.CFrame = CFrame.lookAt(
-                    Vector3.zero,
-                    flatLook.Unit
-                )
-            end
+        -- Face the camera direction
+        bodyGyro.CFrame = CFrame.lookAt(
+            Vector3.zero,
+            camera.CFrame.LookVector
+        )
+
+        -- Leave the grounded state when needed
+        if humanoid.FloorMaterial ~= Enum.Material.Air then
+            humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
         end
     end)
 
@@ -290,14 +289,12 @@ flyButton.Activated:Connect(function()
         flyEnabled = false
         stopFly()
         flyButton.Text = "FLY: OFF"
-        flyButton.BackgroundColor3 =
-            Color3.fromRGB(48, 48, 56)
+        flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
     else
         if startFly() then
             flyEnabled = true
             flyButton.Text = "FLY: ON"
-            flyButton.BackgroundColor3 =
-                Color3.fromRGB(150, 35, 42)
+            flyButton.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
         end
     end
 end)
