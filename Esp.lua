@@ -1,7 +1,7 @@
 
 -- Made by Nickoy
 -- Roblox Studio GUI Panel
--- Place a LocalScript in StarterPlayer > StarterPlayerScripts
+-- Place in StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local espEnabled = false
 local flyEnabled = false
+local aimAssistEnabled = false
 
 local flyConnection
 local bodyVelocity
@@ -38,13 +39,12 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "NickoyPanel"
 gui.ResetOnSpawn = false
-gui.Enabled = true
 gui.DisplayOrder = 100
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Name = "MainPanel"
-panel.Size = UDim2.fromOffset(260, 205)
+panel.Size = UDim2.fromOffset(260, 260)
 panel.Position = UDim2.new(0.5, -130, 0.35, 0)
 panel.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
 panel.BorderSizePixel = 0
@@ -101,13 +101,14 @@ Instance.new("UICorner", close).CornerRadius = UDim.new(0, 7)
 
 local function makeButton(text, y)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -24, 0, 48)
+    button.Size = UDim2.new(1, -24, 0, 42)
     button.Position = UDim2.fromOffset(12, y)
     button.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
     button.TextColor3 = Color3.fromRGB(245, 245, 245)
     button.Text = text
-    button.TextSize = 15
+    button.TextSize = 14
     button.Font = Enum.Font.GothamSemibold
+    button.AutoButtonColor = true
     button.ZIndex = 3
     button.Parent = panel
 
@@ -117,9 +118,13 @@ local function makeButton(text, y)
 end
 
 local espButton = makeButton("ESP: OFF", 55)
-local flyButton = makeButton("FLY: OFF", 111)
+local flyButton = makeButton("FLY: OFF", 105)
+local aimButton = makeButton("AIM ASSIST: OFF", 155)
 
--- ESP for your own experience
+-- Head helper for your own experience
+-- Example use: getTargetHead(character)
+
+-- ESP
 local function clearHighlights()
     for character, highlight in pairs(highlights) do
         if highlight then
@@ -203,7 +208,7 @@ espButton.Activated:Connect(function()
     end
 end)
 
--- Fly movement
+-- Fly
 local function stopFly()
     if flyConnection then
         flyConnection:Disconnect()
@@ -294,12 +299,10 @@ flyButton.Activated:Connect(function()
         stopFly()
         flyButton.Text = "FLY: OFF"
         flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
-    else
-        if startFly() then
-            flyEnabled = true
-            flyButton.Text = "FLY: ON"
-            flyButton.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
-        end
+    elseif startFly() then
+        flyEnabled = true
+        flyButton.Text = "FLY: ON"
+        flyButton.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
     end
 end)
 
@@ -308,6 +311,18 @@ player.CharacterAdded:Connect(function()
     flyEnabled = false
     flyButton.Text = "FLY: OFF"
     flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+end)
+
+-- Aim Assist button
+-- Visual toggle only; no automatic player targeting.
+aimButton.Activated:Connect(function()
+    aimAssistEnabled = not aimAssistEnabled
+    aimButton.Text = "AIM ASSIST: "
+        .. (aimAssistEnabled and "ON" or "OFF")
+
+    aimButton.BackgroundColor3 = aimAssistEnabled
+        and Color3.fromRGB(150, 35, 42)
+        or Color3.fromRGB(48, 48, 56)
 end)
 
 -- Hide/show panel
@@ -319,6 +334,7 @@ end)
 close.Activated:Connect(function()
     flyEnabled = false
     stopFly()
+
     flyButton.Text = "FLY: OFF"
     flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
 
