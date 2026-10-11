@@ -2,6 +2,7 @@
 -- Made by Nickoy
 -- Roblox Studio GUI Panel
 -- Place in StarterPlayer > StarterPlayerScripts
+-- Use as a LocalScript in your own Roblox experience
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -21,11 +22,17 @@ local highlights = {}
 local gui = Instance.new("ScreenGui")
 gui.Name = "NickoyPanel"
 gui.ResetOnSpawn = false
+gui.Enabled = true
+gui.DisplayOrder = 100
+gui.IgnoreGuiInset = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Size = UDim2.fromOffset(260, 205)
 panel.Position = UDim2.new(0.5, -130, 0.35, 0)
+panel.AnchorPoint = Vector2.zero
+panel.Visible = true
+panel.ZIndex = 2
 panel.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
 panel.BorderSizePixel = 0
 panel.Parent = gui
@@ -48,6 +55,7 @@ title.TextColor3 = Color3.fromRGB(255, 75, 80)
 title.TextSize = 18
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
+title.ZIndex = 3
 title.Parent = panel
 
 local close = Instance.new("TextButton")
@@ -58,6 +66,7 @@ close.TextColor3 = Color3.new(1, 1, 1)
 close.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
 close.Font = Enum.Font.GothamBold
 close.TextSize = 15
+close.ZIndex = 3
 close.Parent = panel
 Instance.new("UICorner", close).CornerRadius = UDim.new(0, 7)
 
@@ -71,7 +80,9 @@ local function makeButton(text, y)
     b.TextSize = 15
     b.Font = Enum.Font.GothamSemibold
     b.AutoButtonColor = true
+    b.ZIndex = 3
     b.Parent = panel
+
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
     return b
 end
@@ -79,7 +90,7 @@ end
 local espButton = makeButton("ESP: OFF", 55)
 local flyButton = makeButton("FLY: OFF", 111)
 
--- ESP: highlight other players in your own experience
+-- ESP for your own Roblox experience
 local function clearHighlights()
     for character, highlight in pairs(highlights) do
         if highlight and highlight.Parent then
@@ -90,8 +101,13 @@ local function clearHighlights()
 end
 
 local function addHighlight(otherPlayer, character)
-    if not espEnabled or otherPlayer == player then return end
-    if not character or highlights[character] then return end
+    if not espEnabled or otherPlayer == player then
+        return
+    end
+
+    if not character or highlights[character] then
+        return
+    end
 
     local h = Instance.new("Highlight")
     h.Name = "NickoyESP"
@@ -100,11 +116,15 @@ local function addHighlight(otherPlayer, character)
     h.FillTransparency = 0.65
     h.DepthMode = Enum.HighlightDepthMode.Occluded
     h.Parent = character
+
     highlights[character] = h
 end
 
 local function track(otherPlayer)
-    if otherPlayer == player or tracked[otherPlayer] then return end
+    if otherPlayer == player or tracked[otherPlayer] then
+        return
+    end
+
     tracked[otherPlayer] = true
 
     otherPlayer.CharacterAdded:Connect(function(character)
@@ -121,11 +141,13 @@ end
 for _, otherPlayer in ipairs(Players:GetPlayers()) do
     track(otherPlayer)
 end
+
 Players.PlayerAdded:Connect(track)
 
 espButton.Activated:Connect(function()
     espEnabled = not espEnabled
     espButton.Text = "ESP: " .. (espEnabled and "ON" or "OFF")
+
     espButton.BackgroundColor3 = espEnabled
         and Color3.fromRGB(150, 35, 42)
         or Color3.fromRGB(48, 48, 56)
@@ -141,21 +163,32 @@ espButton.Activated:Connect(function()
     end
 end)
 
--- Fly: local character movement for Studio testing
+-- Fly for Studio testing
 local function stopFly()
     if flyConnection then
         flyConnection:Disconnect()
         flyConnection = nil
     end
-    if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity = nil end
-    if bodyGyro then bodyGyro:Destroy(); bodyGyro = nil end
+
+    if bodyVelocity then
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
+    end
+
+    if bodyGyro then
+        bodyGyro:Destroy()
+        bodyGyro = nil
+    end
 end
 
 local function startFly()
     local character = player.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not root or not humanoid then return false end
+
+    if not root or not humanoid then
+        return false
+    end
 
     stopFly()
 
@@ -174,12 +207,15 @@ local function startFly()
             stopFly()
             flyEnabled = false
             flyButton.Text = "FLY: OFF"
+            flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
             return
         end
 
         local camera = workspace.CurrentCamera
-        bodyGyro.CFrame = camera.CFrame
-        bodyVelocity.Velocity = humanoid.MoveDirection * 45
+        if camera and bodyGyro and bodyVelocity then
+            bodyGyro.CFrame = camera.CFrame
+            bodyVelocity.Velocity = humanoid.MoveDirection * 45
+        end
     end)
 
     return true
@@ -204,6 +240,7 @@ player.CharacterAdded:Connect(function()
     stopFly()
     flyEnabled = false
     flyButton.Text = "FLY: OFF"
+    flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
 end)
 
 close.Activated:Connect(function()
@@ -213,7 +250,8 @@ end)
 
 -- Drag panel with mouse or touch
 local dragging = false
-local dragStart, startPosition
+local dragStart
+local startPosition
 
 title.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -230,6 +268,7 @@ UserInputService.InputChanged:Connect(function(input)
         or input.UserInputType == Enum.UserInputType.Touch
     ) then
         local delta = input.Position - dragStart
+
         panel.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
