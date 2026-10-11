@@ -1,4 +1,3 @@
-
 -- NICKOY PANEL
 -- For your own Roblox Studio experience
 
@@ -10,14 +9,22 @@ local player = Players.LocalPlayer
 
 local espEnabled = false
 local flyEnabled = false
+local aimAssistEnabled = false
+
 local flyConnection
+local aimConnection
 local bodyVelocity
 local bodyGyro
 local flyAttachment
 
+local MAX_AIM_DISTANCE = 150
+local AIM_SMOOTHNESS = 0.15
+
+local npcFolder = workspace:WaitForChild("PracticeNPCs")
+
 local highlights = {}
 local tracked = {}
-local aimAssistEnabled = false
+local characterConnections = {}
 
 -- GUI
 local screenGui = Instance.new("ScreenGui")
@@ -48,10 +55,11 @@ title.Size = UDim2.new(1, -50, 0, 42)
 title.Position = UDim2.fromOffset(12, 3)
 title.BackgroundTransparency = 1
 title.Text = "NICKOY | PANEL"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextXAlignment = Enum.TextXAlignment.Left
+title.Active = true
 title.Parent = panel
 
 local close = Instance.new("TextButton")
@@ -105,7 +113,6 @@ local function makeButton(text, order)
     button.Font = Enum.Font.GothamBold
     button.TextSize = 14
     button.LayoutOrder = order
-    button.AutoButtonColor = true
     button.Parent = buttonContainer
 
     local buttonCorner = Instance.new("UICorner")
@@ -129,9 +136,7 @@ end
 -- ESP
 local function clearHighlights()
     for character, highlight in pairs(highlights) do
-        if highlight then
-            highlight:Destroy()
-        end
+        highlight:Destroy()
         highlights[character] = nil
     end
 end
@@ -164,12 +169,13 @@ local function track(otherPlayer)
 
     tracked[otherPlayer] = true
 
-    otherPlayer.CharacterAdded:Connect(function(character)
-        if espEnabled then
-            task.wait(0.5)
-            addHighlight(otherPlayer, character)
-        end
-    end)
+    characterConnections[otherPlayer] =
+        otherPlayer.CharacterAdded:Connect(function(character)
+            if espEnabled then
+                task.wait(0.5)
+                addHighlight(otherPlayer, character)
+            end
+        end)
 
     if otherPlayer.Character and espEnabled then
         addHighlight(otherPlayer, otherPlayer.Character)
@@ -184,6 +190,12 @@ Players.PlayerAdded:Connect(track)
 
 Players.PlayerRemoving:Connect(function(otherPlayer)
     tracked[otherPlayer] = nil
+
+    if characterConnections[otherPlayer] then
+        characterConnections[otherPlayer]:Disconnect()
+        characterConnections[otherPlayer] = nil
+    end
+
     if otherPlayer.Character and highlights[otherPlayer.Character] then
         highlights[otherPlayer.Character]:Destroy()
         highlights[otherPlayer.Character] = nil
@@ -260,9 +272,9 @@ local function startFly()
     bodyGyro = Instance.new("AlignOrientation")
     bodyGyro.Name = "NickoyFlyOrientation"
     bodyGyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
-    bodyGyro.Attachment0 = flyAttachment
     bodyGyro.MaxTorque = 100000
     bodyGyro.Responsiveness = 15
+    bodyGyro.Attachment0 = flyAttachment
     bodyGyro.Parent = root
 
     humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
@@ -280,7 +292,6 @@ local function startFly()
             return
         end
 
-        -- Fly in the direction the camera looks, including up/down.
         bodyVelocity.VectorVelocity = camera.CFrame.LookVector * 45
 
         bodyGyro.CFrame = CFrame.lookAt(
@@ -309,29 +320,82 @@ flyButton.Activated:Connect(function()
     setButton(flyButton, flyEnabled, "FLY")
 end)
 
--- Visual-only Aim Assist toggle (does not target players)
+-- AIM ASSIST: NPC PRACTICE TARGET HEADS
+local function getNearestNPCHead()
+    local camera = workspace.CurrentCamera
+    if not camera then
+        return nil
+    end
+
+    local nearestHead = nil
+    local nearestDistance = MAX_AIM_DISTANCE
+
+    for _, npc in ipairs(npcFolder:GetChildren()) do
+        local humanoid = npc:FindFirstChildOfClass("Humanoid")
+        local head = npc:FindFirstChild("Head")
+
+        if humanoid
+            and humanoid.Health > 0
+            and head
+            and head:IsA("BasePart") then
+
+            local distance =
+                (head.Position - camera.CFrame.Position).Magnitude
+
+            local _, onScreen =
+                camera:WorldToViewportPoint(head.Position)
+
+            if onScreen and distance < nearestDistance then
+                nearestDistance = distance
+                nearestHead = head
+            end
+        end
+    end
+
+    return nearestHead
+end
+
+local function stopAimAssist()
+    if aimConnection then
+        aimConnection:Disconnect()
+        aimConnection = nil
+    end
+end
+
 aimButton.Activated:Connect(function()
     aimAssistEnabled = not aimAssistEnabled
+    stopAimAssist()
+
+    if aimAssistEnabled then
+        aimConnection = RunService.RenderStepped:Connect(function()
+            local camera = workspace.CurrentCamera
+            local head = getNearestNPCHead()
+
+            if camera and head then
+                local targetCFrame = CFrame.lookAt(
+                    camera.CFrame.Position,
+                    head.Position
+                )
+
+                camera.CFrame = camera.CFrame:Lerp(
+                    targetCFrame,
+                    AIM_SMOOTHNESS
+                )
+            end
+        end)
+    end
+
     setButton(aimButton, aimAssistEnabled, "AIM ASSIST")
 end)
 
--- Respawn handling
+-- RESPAWN HANDLING
 player.CharacterAdded:Connect(function()
     stopFly()
     flyEnabled = false
     setButton(flyButton, false, "FLY")
-
-    if espEnabled then
-        task.wait(0.5)
-        for _, otherPlayer in ipairs(Players:GetPlayers()) do
-            if otherPlayer ~= player and otherPlayer.Character then
-                addHighlight(otherPlayer, otherPlayer.Character)
-            end
-        end
-    end
 end)
 
--- Show/hide panel
+-- SHOW/HIDE PANEL
 guiToggle.Activated:Connect(function()
     panel.Visible = true
     guiToggle.Visible = false
@@ -342,11 +406,15 @@ close.Activated:Connect(function()
     flyEnabled = false
     setButton(flyButton, false, "FLY")
 
+    stopAimAssist()
+    aimAssistEnabled = false
+    setButton(aimButton, false, "AIM ASSIST")
+
     panel.Visible = false
     guiToggle.Visible = true
 end)
 
--- Drag panel by its title
+-- DRAG PANEL BY TITLE
 local dragging = false
 local dragInput
 local dragStart
