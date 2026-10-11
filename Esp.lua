@@ -19,29 +19,39 @@ local flyAttachment
 local tracked = {}
 local highlights = {}
 
+-- Find a character's head in your own experience
+local function getTargetHead(character)
+    if not character then
+        return nil
+    end
+
+    local head = character:FindFirstChild("Head")
+
+    if head and head:IsA("BasePart") then
+        return head
+    end
+
+    return nil
+end
+
 -- GUI
 local gui = Instance.new("ScreenGui")
 gui.Name = "NickoyPanel"
 gui.ResetOnSpawn = false
 gui.Enabled = true
 gui.DisplayOrder = 100
-gui.IgnoreGuiInset = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Name = "MainPanel"
 panel.Size = UDim2.fromOffset(260, 205)
 panel.Position = UDim2.new(0.5, -130, 0.35, 0)
-panel.AnchorPoint = Vector2.zero
-panel.Visible = true
-panel.ZIndex = 2
 panel.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
 panel.BorderSizePixel = 0
+panel.ZIndex = 2
 panel.Parent = gui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
-corner.Parent = panel
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
 
 local stroke = Instance.new("UIStroke")
 stroke.Color = Color3.fromRGB(220, 45, 55)
@@ -52,7 +62,7 @@ stroke.Parent = panel
 local guiToggle = Instance.new("TextButton")
 guiToggle.Name = "EnableGUI"
 guiToggle.Size = UDim2.fromOffset(120, 38)
-guiToggle.Position = UDim2.new(0, 15, 0, 15)
+guiToggle.Position = UDim2.fromOffset(15, 15)
 guiToggle.BackgroundColor3 = Color3.fromRGB(150, 35, 42)
 guiToggle.TextColor3 = Color3.new(1, 1, 1)
 guiToggle.Text = "SHOW PANEL"
@@ -90,21 +100,20 @@ close.Parent = panel
 Instance.new("UICorner", close).CornerRadius = UDim.new(0, 7)
 
 local function makeButton(text, y)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -24, 0, 48)
-    b.Position = UDim2.fromOffset(12, y)
-    b.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
-    b.TextColor3 = Color3.fromRGB(245, 245, 245)
-    b.Text = text
-    b.TextSize = 15
-    b.Font = Enum.Font.GothamSemibold
-    b.AutoButtonColor = true
-    b.ZIndex = 3
-    b.Parent = panel
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -24, 0, 48)
+    button.Position = UDim2.fromOffset(12, y)
+    button.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+    button.TextColor3 = Color3.fromRGB(245, 245, 245)
+    button.Text = text
+    button.TextSize = 15
+    button.Font = Enum.Font.GothamSemibold
+    button.ZIndex = 3
+    button.Parent = panel
 
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
 
-    return b
+    return button
 end
 
 local espButton = makeButton("ESP: OFF", 55)
@@ -129,15 +138,15 @@ local function addHighlight(otherPlayer, character)
         return
     end
 
-    local h = Instance.new("Highlight")
-    h.Name = "NickoyESP"
-    h.FillColor = Color3.fromRGB(235, 45, 55)
-    h.OutlineColor = Color3.fromRGB(255, 230, 230)
-    h.FillTransparency = 0.65
-    h.DepthMode = Enum.HighlightDepthMode.Occluded
-    h.Parent = character
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "NickoyESP"
+    highlight.FillColor = Color3.fromRGB(235, 45, 55)
+    highlight.OutlineColor = Color3.fromRGB(255, 230, 230)
+    highlight.FillTransparency = 0.65
+    highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+    highlight.Parent = character
 
-    highlights[character] = h
+    highlights[character] = highlight
 end
 
 local function track(otherPlayer)
@@ -166,10 +175,12 @@ Players.PlayerAdded:Connect(track)
 
 Players.PlayerRemoving:Connect(function(otherPlayer)
     local character = otherPlayer.Character
+
     if character and highlights[character] then
         highlights[character]:Destroy()
         highlights[character] = nil
     end
+
     tracked[otherPlayer] = nil
 end)
 
@@ -215,7 +226,6 @@ local function stopFly()
     end
 end
 
--- Updated camera-directed flight
 local function startFly()
     local character = player.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -235,8 +245,7 @@ local function startFly()
     bodyVelocity.Name = "NickoyFlyVelocity"
     bodyVelocity.Attachment0 = flyAttachment
     bodyVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-    bodyVelocity.VelocityConstraintMode =
-        Enum.VelocityConstraintMode.Vector
+    bodyVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
     bodyVelocity.ForceLimitsEnabled = false
     bodyVelocity.VectorVelocity = Vector3.new(0, 35, 0)
     bodyVelocity.Parent = root
@@ -244,8 +253,7 @@ local function startFly()
     bodyGyro = Instance.new("AlignOrientation")
     bodyGyro.Name = "NickoyFlyOrientation"
     bodyGyro.Attachment0 = flyAttachment
-    bodyGyro.Mode =
-        Enum.OrientationAlignmentMode.OneAttachment
+    bodyGyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
     bodyGyro.MaxTorque = 100000
     bodyGyro.Responsiveness = 15
     bodyGyro.Parent = root
@@ -266,16 +274,12 @@ local function startFly()
             return
         end
 
-        -- Move in the direction the camera looks, including up/down
         bodyVelocity.VectorVelocity = camera.CFrame.LookVector * 45
-
-        -- Face the camera direction
         bodyGyro.CFrame = CFrame.lookAt(
             Vector3.zero,
             camera.CFrame.LookVector
         )
 
-        -- Leave the grounded state when needed
         if humanoid.FloorMaterial ~= Enum.Material.Air then
             humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
         end
@@ -306,7 +310,7 @@ player.CharacterAdded:Connect(function()
     flyButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
 end)
 
--- Hide panel; SHOW PANEL brings it back
+-- Hide/show panel
 guiToggle.Activated:Connect(function()
     panel.Visible = true
     guiToggle.Visible = false
