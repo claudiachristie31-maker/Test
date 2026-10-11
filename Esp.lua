@@ -1,305 +1,327 @@
--- NICKOY PANEL
--- For your own Roblox Studio experience
+--// NickoyPanel - Roblox Studio Training Tools
+--// Place in StarterPlayer > StarterPlayerScripts
+--// Targets must be registered in Workspace.AimTrainingTargets
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
--- Prevent duplicate panels
-local existing = playerGui:FindFirstChild("NickoyPanel")
-if existing then
-    existing:Destroy()
+-- SETTINGS
+local MAX_AIM_DISTANCE = 150
+local AIM_SMOOTHNESS = 0.15
+local FLY_SPEED = 45
+-- TARGET REGISTRY
+local targetFolder = workspace:WaitForChild("AimTrainingTargets")
+-- REMOVE OLD GUI
+local oldGui = playerGui:FindFirstChild("NickoyPanel")
+if oldGui then
+    oldGui:Destroy()
 end
+-- STATE
 local espEnabled = false
 local flyEnabled = false
 local aimAssistEnabled = false
-local flyConnection
 local aimConnection
-local bodyVelocity
-local bodyGyro
-local flyAttachment
-local MAX_AIM_DISTANCE = 150
-local AIM_SMOOTHNESS = 0.15
--- NPC practice folder
-local npcFolder = workspace:FindFirstChild("PracticeNPCs")
-if not npcFolder then
-    warn("NickoyPanel: Create Workspace > PracticeNPCs for aim training.")
-end
+local flyConnection
+local espConnection
 local highlights = {}
-local tracked = {}
-local characterConnections = {}
+local flyAttachment
+local flyVelocity
+local flyOrientation
 -- GUI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NickoyPanel"
-screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 100
-screenGui.Parent = playerGui
-local panel = Instance.new("Frame")
-panel.Name = "MainPanel"
-panel.Size = UDim2.fromOffset(260, 250)
-panel.Position = UDim2.new(0.5, -130, 0.5, -125)
-panel.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-panel.BorderSizePixel = 0
-panel.Parent = screenGui
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = panel
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(235, 45, 55)
-stroke.Thickness = 2
-stroke.Parent = panel
+local gui = Instance.new("ScreenGui")
+gui.Name = "NickoyPanel"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.fromOffset(240, 250)
+main.Position = UDim2.new(0.05, 0, 0.3, 0)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+main.BorderSizePixel = 0
+main.Active = true
+main.Parent = gui
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = main
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 0, 42)
-title.Position = UDim2.fromOffset(12, 3)
+title.Size = UDim2.new(1, -45, 0, 38)
+title.Position = UDim2.fromOffset(10, 0)
 title.BackgroundTransparency = 1
-title.Text = "NICKOY | PANEL"
+title.Text = "NickoyPanel"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 16
+title.TextSize = 17
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Active = true
-title.Parent = panel
-local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(32, 30)
-close.Position = UDim2.new(1, -40, 0, 6)
-close.BackgroundColor3 = Color3.fromRGB(180, 35, 45)
-close.Text = "X"
-close.TextColor3 = Color3.new(1, 1, 1)
-close.Font = Enum.Font.GothamBold
-close.TextSize = 15
-close.Parent = panel
+title.Parent = main
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.fromOffset(32, 28)
+closeButton.Position = UDim2.new(1, -38, 0, 5)
+closeButton.Text = "X"
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 14
+closeButton.TextColor3 = Color3.new(1, 1, 1)
+closeButton.BackgroundColor3 = Color3.fromRGB(170, 55, 55)
+closeButton.Parent = main
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 6)
-closeCorner.Parent = close
-local guiToggle = Instance.new("TextButton")
-guiToggle.Size = UDim2.fromOffset(125, 36)
-guiToggle.Position = UDim2.fromOffset(15, 100)
-guiToggle.BackgroundColor3 = Color3.fromRGB(180, 35, 45)
-guiToggle.Text = "SHOW PANEL"
-guiToggle.TextColor3 = Color3.new(1, 1, 1)
-guiToggle.Font = Enum.Font.GothamBold
-guiToggle.TextSize = 13
-guiToggle.Visible = false
-guiToggle.Parent = screenGui
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 7)
-toggleCorner.Parent = guiToggle
--- BUTTONS
-local buttonContainer = Instance.new("Frame")
-buttonContainer.Position = UDim2.fromOffset(12, 50)
-buttonContainer.Size = UDim2.new(1, -24, 1, -62)
-buttonContainer.BackgroundTransparency = 1
-buttonContainer.Parent = panel
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, 8)
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Parent = buttonContainer
-local function makeButton(text, order)
+closeCorner.Parent = closeButton
+local function createButton(text, y)
     local button = Instance.new("TextButton")
-    button.Name = text:gsub("[^%w]", "") .. "Button"
-    button.Size = UDim2.new(1, 0, 0, 42)
-    button.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
-    button.Text = text
+    button.Size = UDim2.new(1, -24, 0, 42)
+    button.Position = UDim2.fromOffset(12, y)
+    button.BackgroundColor3 = Color3.fromRGB(55, 55, 68)
     button.TextColor3 = Color3.new(1, 1, 1)
-    button.Font = Enum.Font.GothamBold
+    button.Font = Enum.Font.GothamSemibold
     button.TextSize = 14
-    button.LayoutOrder = order
-    button.Parent = buttonContainer
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 7)
-    buttonCorner.Parent = button
+    button.Text = text .. ": OFF"
+    button.AutoButtonColor = true
+    button.Parent = main
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 7)
+    corner.Parent = button
     return button
 end
-local espButton = makeButton("ESP: OFF", 1)
-local flyButton = makeButton("FLY: OFF", 2)
-local aimButton = makeButton("AIM ASSIST: OFF", 3)
+local espButton = createButton("TRAINING ESP", 48)
+local flyButton = createButton("FLY", 98)
+local aimButton = createButton("HEAD-LOCK TRAINING", 148)
 local function setButton(button, enabled, label)
     button.Text = label .. (enabled and ": ON" or ": OFF")
     button.BackgroundColor3 = enabled
-        and Color3.fromRGB(180, 35, 45)
-        or Color3.fromRGB(48, 48, 56)
+        and Color3.fromRGB(35, 135, 95)
+        or Color3.fromRGB(55, 55, 68)
 end
--- ESP
-local function clearHighlights()
-    for character, highlight in pairs(highlights) do
-        if highlight then
-            highlight:Destroy()
+-- DRAG WINDOW
+do
+    local dragging = false
+    local dragStart
+    local startPosition
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = main.Position
         end
-        highlights[character] = nil
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch
+        ) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+-- TRAINING ESP: REGISTERED MODELS ONLY
+local function removeHighlight(model)
+    local highlight = highlights[model]
+    if highlight then
+        highlight:Destroy()
+        highlights[model] = nil
     end
 end
-local function addHighlight(otherPlayer, character)
-    if not espEnabled or otherPlayer == player then
+local function addHighlight(model)
+    if not espEnabled or not model:IsA("Model") then
         return
     end
-    if not character or highlights[character] then
+    if not model:FindFirstChildOfClass("Humanoid")
+        or not model:FindFirstChild("Head") then
+        return
+    end
+    if highlights[model] then
         return
     end
     local highlight = Instance.new("Highlight")
-    highlight.Name = "NickoyESP"
-    highlight.FillColor = Color3.fromRGB(235, 45, 55)
-    highlight.OutlineColor = Color3.fromRGB(255, 230, 230)
+    highlight.Name = "TrainingTargetHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = Color3.fromRGB(30, 200, 120)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.FillTransparency = 0.65
     highlight.OutlineTransparency = 0
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = character
-    highlights[character] = highlight
+    highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+    highlight.Parent = model
+    highlights[model] = highlight
 end
-local function track(otherPlayer)
-    if otherPlayer == player or tracked[otherPlayer] then
-        return
+local function stopESP()
+    espEnabled = false
+    if espConnection then
+        espConnection:Disconnect()
+        espConnection = nil
     end
-    tracked[otherPlayer] = true
-    characterConnections[otherPlayer] =
-        otherPlayer.CharacterAdded:Connect(function(character)
-            if espEnabled then
-                task.wait(0.5)
-                addHighlight(otherPlayer, character)
-            end
-        end)
-    if otherPlayer.Character and espEnabled then
-        addHighlight(otherPlayer, otherPlayer.Character)
+    for model in pairs(highlights) do
+        removeHighlight(model)
     end
 end
-for _, otherPlayer in ipairs(Players:GetPlayers()) do
-    track(otherPlayer)
+local function startESP()
+    espEnabled = true
+    for _, model in ipairs(targetFolder:GetChildren()) do
+        addHighlight(model)
+    end
+    espConnection = targetFolder.ChildAdded:Connect(function(model)
+        task.wait(0.1)
+        addHighlight(model)
+    end)
+    targetFolder.ChildRemoved:Connect(function(model)
+        removeHighlight(model)
+    end)
 end
-Players.PlayerAdded:Connect(track)
-Players.PlayerRemoving:Connect(function(otherPlayer)
-    tracked[otherPlayer] = nil
-    if characterConnections[otherPlayer] then
-        characterConnections[otherPlayer]:Disconnect()
-        characterConnections[otherPlayer] = nil
-    end
-    if otherPlayer.Character then
-        local highlight = highlights[otherPlayer.Character]
-        if highlight then
-            highlight:Destroy()
-            highlights[otherPlayer.Character] = nil
-        end
-    end
-end)
 espButton.Activated:Connect(function()
-    espEnabled = not espEnabled
-    setButton(espButton, espEnabled, "ESP")
     if espEnabled then
-        for _, otherPlayer in ipairs(Players:GetPlayers()) do
-            if otherPlayer ~= player and otherPlayer.Character then
-                addHighlight(otherPlayer, otherPlayer.Character)
-            end
-        end
+        stopESP()
     else
-        clearHighlights()
+        startESP()
     end
+    setButton(espButton, espEnabled, "TRAINING ESP")
 end)
 -- FLY
 local function stopFly()
+    flyEnabled = false
     if flyConnection then
         flyConnection:Disconnect()
         flyConnection = nil
     end
-    if bodyVelocity then
-        bodyVelocity:Destroy()
-        bodyVelocity = nil
+    if flyVelocity then
+        flyVelocity:Destroy()
+        flyVelocity = nil
     end
-    if bodyGyro then
-        bodyGyro:Destroy()
-        bodyGyro = nil
+    if flyOrientation then
+        flyOrientation:Destroy()
+        flyOrientation = nil
     end
     if flyAttachment then
         flyAttachment:Destroy()
         flyAttachment = nil
     end
+    local character = player.Character
+    local humanoid = character
+        and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = false
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
 end
 local function startFly()
     local character = player.Character
-    if not character then
-        return false
-    end
-    local root = character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not root or not humanoid then
-        return false
+    local humanoid = character
+        and character:FindFirstChildOfClass("Humanoid")
+    local root = character
+        and character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not root then
+        return
     end
     stopFly()
+    flyEnabled = true
     flyAttachment = Instance.new("Attachment")
     flyAttachment.Name = "NickoyFlyAttachment"
     flyAttachment.Parent = root
-    bodyVelocity = Instance.new("LinearVelocity")
-    bodyVelocity.Name = "NickoyFlyVelocity"
-    bodyVelocity.Attachment0 = flyAttachment
-    bodyVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-    bodyVelocity.VelocityConstraintMode =
+    flyVelocity = Instance.new("LinearVelocity")
+    flyVelocity.Name = "NickoyFlyVelocity"
+    flyVelocity.Attachment0 = flyAttachment
+    flyVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    flyVelocity.VelocityConstraintMode =
         Enum.VelocityConstraintMode.Vector
-    bodyVelocity.ForceLimitsEnabled = false
-    bodyVelocity.VectorVelocity = Vector3.zero
-    bodyVelocity.Parent = root
-    bodyGyro = Instance.new("AlignOrientation")
-    bodyGyro.Name = "NickoyFlyOrientation"
-    bodyGyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
-    bodyGyro.MaxTorque = 100000
-    bodyGyro.Responsiveness = 15
-    bodyGyro.Attachment0 = flyAttachment
-    bodyGyro.Parent = root
-    humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-    flyConnection = RunService.Heartbeat:Connect(function()
-        if not root.Parent or not humanoid.Parent then
-            flyEnabled = false
+    flyVelocity.VectorVelocity = Vector3.zero
+    flyVelocity.MaxForce = 100000
+    flyVelocity.Parent = root
+    flyOrientation = Instance.new("AlignOrientation")
+    flyOrientation.Name = "NickoyFlyOrientation"
+    flyOrientation.Attachment0 = flyAttachment
+    flyOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    flyOrientation.MaxTorque = 100000
+    flyOrientation.Responsiveness = 15
+    flyOrientation.Parent = root
+    humanoid.PlatformStand = true
+    flyConnection = RunService.RenderStepped:Connect(function()
+        if not flyEnabled or not root.Parent then
             stopFly()
-            setButton(flyButton, false, "FLY")
             return
         end
         local camera = workspace.CurrentCamera
-        if not camera or not bodyVelocity or not bodyGyro then
+        if not camera then
             return
         end
-        bodyVelocity.VectorVelocity = camera.CFrame.LookVector * 45
-        bodyGyro.CFrame = CFrame.lookAt(
-            Vector3.zero,
-            camera.CFrame.LookVector
-        )
-        if humanoid.FloorMaterial ~= Enum.Material.Air then
-            humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+        local direction = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            direction += camera.CFrame.LookVector
         end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            direction -= camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            direction -= camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            direction += camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            direction += Vector3.yAxis
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            direction -= Vector3.yAxis
+        end
+        if direction.Magnitude > 0 then
+            direction = direction.Unit * FLY_SPEED
+        end
+        flyVelocity.VectorVelocity = direction
+        local look = camera.CFrame.LookVector
+        flyOrientation.CFrame = CFrame.lookAt(
+            Vector3.zero,
+            Vector3.new(look.X, 0, look.Z).Magnitude > 0.001
+                and Vector3.new(look.X, 0, look.Z).Unit
+                or Vector3.new(0, 0, -1)
+        )
     end)
-    return true
 end
 flyButton.Activated:Connect(function()
     if flyEnabled then
-        flyEnabled = false
         stopFly()
     else
-        flyEnabled = startFly()
+        startFly()
     end
     setButton(flyButton, flyEnabled, "FLY")
 end)
--- NPC PRACTICE HEAD LOCK
-local function getNearestNPCHead()
+-- HEAD-LOCK TRAINING
+local function getNearestTestHead()
     local camera = workspace.CurrentCamera
-    if not camera or not npcFolder or not npcFolder.Parent then
+    if not camera then
         return nil
     end
+    local screenCenter = camera.ViewportSize / 2
     local nearestHead = nil
     local nearestScreenDistance = math.huge
-    local screenCenter = camera.ViewportSize / 2
-    for _, npc in ipairs(npcFolder:GetChildren()) do
-        local humanoid = npc:FindFirstChildOfClass("Humanoid")
-        local head = npc:FindFirstChild("Head")
-        if humanoid and humanoid.Health > 0
-            and head and head:IsA("BasePart") then
-            local screenPos, onScreen =
-                camera:WorldToViewportPoint(head.Position)
-            local worldDistance =
-                (head.Position - camera.CFrame.Position).Magnitude
-            if onScreen and screenPos.Z > 0
-                and worldDistance <= MAX_AIM_DISTANCE then
-                local screenDistance = (
-                    Vector2.new(screenPos.X, screenPos.Y)
-                    - screenCenter
-                ).Magnitude
-                if screenDistance < nearestScreenDistance then
-                    nearestScreenDistance = screenDistance
-                    nearestHead = head
+    for _, character in ipairs(targetFolder:GetChildren()) do
+        if character:IsA("Model") then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local head = character:FindFirstChild("Head")
+            if humanoid and humanoid.Health > 0
+                and head and head:IsA("BasePart") then
+                local screenPos, onScreen =
+                    camera:WorldToViewportPoint(head.Position)
+                local worldDistance =
+                    (head.Position - camera.CFrame.Position).Magnitude
+                if onScreen and screenPos.Z > 0
+                    and worldDistance <= MAX_AIM_DISTANCE then
+                    local screenDistance = (
+                        Vector2.new(screenPos.X, screenPos.Y)
+                        - screenCenter
+                    ).Magnitude
+                    if screenDistance < nearestScreenDistance then
+                        nearestScreenDistance = screenDistance
+                        nearestHead = head
+                    end
                 end
             end
         end
@@ -307,18 +329,20 @@ local function getNearestNPCHead()
     return nearestHead
 end
 local function stopAimAssist()
+    aimAssistEnabled = false
     if aimConnection then
         aimConnection:Disconnect()
         aimConnection = nil
     end
 end
 aimButton.Activated:Connect(function()
-    aimAssistEnabled = not aimAssistEnabled
-    stopAimAssist()
     if aimAssistEnabled then
+        stopAimAssist()
+    else
+        aimAssistEnabled = true
         aimConnection = RunService.RenderStepped:Connect(function()
             local camera = workspace.CurrentCamera
-            local head = getNearestNPCHead()
+            local head = getNearestTestHead()
             if camera and head and head.Parent then
                 local targetCFrame = CFrame.lookAt(
                     camera.CFrame.Position,
@@ -331,61 +355,20 @@ aimButton.Activated:Connect(function()
             end
         end)
     end
-    setButton(aimButton, aimAssistEnabled, "AIM ASSIST")
+    setButton(aimButton, aimAssistEnabled, "HEAD-LOCK TRAINING")
 end)
--- RESPAWN
+-- RESPAWN CLEANUP
 player.CharacterAdded:Connect(function()
     stopFly()
-    flyEnabled = false
     setButton(flyButton, false, "FLY")
 end)
--- SHOW / HIDE
-guiToggle.Activated:Connect(function()
-    panel.Visible = true
-    guiToggle.Visible = false
-end)
-close.Activated:Connect(function()
+-- CLOSE PANEL AND CLEAN UP
+closeButton.Activated:Connect(function()
     stopFly()
-    flyEnabled = false
-    setButton(flyButton, false, "FLY")
     stopAimAssist()
-    aimAssistEnabled = false
-    setButton(aimButton, false, "AIM ASSIST")
-    panel.Visible = false
-    guiToggle.Visible = true
+    stopESP()
+    gui:Destroy()
 end)
--- DRAG PANEL BY TITLE
-local dragging = false
-local dragInput
-local dragStart
-local startPosition
-title.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPosition = panel.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-title.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and input == dragInput then
-        local delta = input.Position - dragStart
-        panel.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
-        )
-    end
-end)
+setButton(espButton, false, "TRAINING ESP")
+setButton(flyButton, false, "FLY")
+setButton(aimButton, false, "HEAD-LOCK TRAINING")
